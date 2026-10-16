@@ -1,0 +1,24 @@
+{
+  "name": "catalog-pictures-worker",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker app for AI background removal and 1000x1000 white square centering for catalog pictures",
+  "main": "src/worker.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "start": "wrangler dev"
+  },
+  "keywords": [
+    "cloudflare-worker",
+    "catalog",
+    "background-removal",
+    "ai",
+    "image-processing",
+    "ecommerce"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "wrangler": "^3.111.0"
+  }
+}
