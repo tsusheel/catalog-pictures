@@ -1,0 +1,17 @@
+{
+  "name": "Catalog Image Processor",
+  "short_name": "CatalogStudio",
+  "description": "Client-side AI background removal and 1000x1000 white square centering for product catalogs",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#121212",
+  "theme_color": "#121212",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

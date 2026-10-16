@@ -1,12 +1,14 @@
 {
-  "name": "catalog-pictures-worker",
+  "name": "catalog-pictures",
   "version": "1.0.0",
+  "type": "module",
   "description": "Cloudflare Worker app for AI background removal and 1000x1000 white square centering for catalog pictures",
   "main": "src/worker.js",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "start": "wrangler dev"
+    "dev": "node build.js && wrangler dev",
+    "build": "node build.js",
+    "deploy": "npm run build && wrangler deploy",
+    "start": "node build.js && wrangler dev"
   },
   "keywords": [
     "cloudflare-worker",
@@ -19,6 +21,7 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
+    "esbuild": "^0.28.2",
     "wrangler": "^3.111.0"
   }
 }
