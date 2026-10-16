@@ -62,12 +62,34 @@ async function build() {
   // Write single-file index.html to dist/
   fs.writeFileSync(path.join(DIST_DIR, 'index.html'), html, 'utf-8');
 
-  // 5. Copy PWA assets to dist/ (sw.js, manifest.json, icon.svg)
-  const pwaFiles = ['sw.js', 'manifest.json', 'icon.svg'];
+  // 5. Copy PWA & static assets to dist/
+  const pwaFiles = ['sw.js', 'manifest.json'];
   for (const file of pwaFiles) {
     const src = path.join(PUBLIC_DIR, file);
     if (fs.existsSync(src)) {
       fs.copyFileSync(src, path.join(DIST_DIR, file));
+    }
+  }
+
+  // Copy entire public/assets directory to dist/assets
+  const assetsSrcDir = path.join(PUBLIC_DIR, 'assets');
+  const assetsDistDir = path.join(DIST_DIR, 'assets');
+  if (fs.existsSync(assetsSrcDir)) {
+    fs.cpSync(assetsSrcDir, assetsDistDir, { recursive: true });
+
+    // Also copy root-level icon fallbacks so /favicon.ico and /site.webmanifest resolve at root
+    const rootCopies = [
+      'favicon.ico',
+      'site.webmanifest',
+      'apple-touch-icon.png',
+      'web-app-manifest-192x192.png',
+      'web-app-manifest-512x512.png'
+    ];
+    for (const item of rootCopies) {
+      const srcFile = path.join(assetsSrcDir, item);
+      if (fs.existsSync(srcFile)) {
+        fs.copyFileSync(srcFile, path.join(DIST_DIR, item));
+      }
     }
   }
 

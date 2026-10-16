@@ -1,14 +1,19 @@
 /**
- * Service Worker for Catalog Image Processor
+ * Service Worker for Cati - Catalog Studio
  * Enables 100% offline usage and reduces Cloudflare requests to 0 on repeat visits.
  */
 
-const CACHE_NAME = 'catalog-processor-v1';
+const CACHE_NAME = 'cati-v1';
 const PRECACHE_URLS = [
   '/',
   '/index.html',
+  '/assets/site.webmanifest',
   '/manifest.json',
-  '/icon.svg',
+  '/assets/favicon-96x96.png',
+  '/assets/favicon.ico',
+  '/assets/apple-touch-icon.png',
+  '/assets/web-app-manifest-192x192.png',
+  '/assets/web-app-manifest-512x512.png',
   'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
 ];
 

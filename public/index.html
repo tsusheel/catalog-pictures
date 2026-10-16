@@ -3,11 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Catalog Image Processor</title>
-  <meta name="description" content="Batch product image background removal and centering on square catalog canvas.">
+  <title>Cati - Catalog Studio</title>
+  <meta name="description" content="Cati - Fast, client-side product catalog image background removal and 1000x1000 square studio.">
   <meta name="theme-color" content="#121212">
-  <link rel="icon" type="image/svg+xml" href="/icon.svg">
-  <link rel="manifest" href="/manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Cati">
+
+  <!-- Favicons & PWA Manifest -->
+  <link rel="icon" type="image/png" href="/assets/favicon-96x96.png" sizes="96x96">
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+  <link rel="shortcut icon" href="/assets/favicon.ico">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+  <link rel="manifest" href="/assets/site.webmanifest">
   <link rel="stylesheet" href="style.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script>
@@ -25,11 +33,9 @@
     <header class="app-header">
       <div class="brand-section">
         <div class="brand-logo" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-          </svg>
+          <img src="/assets/favicon-96x96.png" alt="Cati" class="brand-avatar" width="24" height="24">
         </div>
-        <h1 class="brand-title">Catalog Image Processor</h1>
+        <h1 class="brand-title">Cati <span class="brand-subtitle">Catalog Studio</span></h1>
       </div>
     </header>
 
