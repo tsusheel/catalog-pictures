@@ -23,6 +23,11 @@ A JavaScript application hosted on **Cloudflare Workers** that automatically rem
   - **Padding Slider:** 5% to 25% edge margin.
   - **Background Fill:** Pure White (`#FFFFFF`), Off-White (`#F8F9FA`), Warm White (`#FAF7F2`), or Transparent PNG.
   - **Format:** JPEG (92% quality), PNG (lossless), or WebP.
+- **🛡️ Full-Bleed & Difficult Photo Handling:**
+  - **Edge-to-Edge Margin Injection:** Clamps outer pixel borders into a temporary 15% padded frame before model inference, preventing neural networks from failing on products that touch the image edge (e.g. snack bars, pouches, cartons).
+  - **Auto-Chroma Banner Keyer:** Identifies flat marketing graphic backgrounds (like solid brand orange or purple blocks) and flood-erases them from outer corners without neural distortion.
+  - **Box Mode (Full Packaging):** One-click toggle that preserves full carton boxes and edge-to-edge packaging without destructive AI cuts, centering the full product box cleanly onto the 1000×1000 white square.
+  - **Inspection & Repair Studio:** Interactive modal featuring a **Magic Wand Color Eraser** (click any background color to flood-erase with real-time tolerance slider) and 1-click retry tools.
 
 ---
 

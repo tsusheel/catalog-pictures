@@ -1,8 +1,4 @@
-/**
- * AI Background Remover Module
- * Interfaces with @imgly/background-removal running client-side via WebAssembly/WebGPU.
- * Completely free, no API keys, zero cloud costs.
- */
+import { CatalogImageProcessor } from './image-processor.js';
 
 class BackgroundRemovalService {
   constructor() {
@@ -43,12 +39,22 @@ class BackgroundRemovalService {
   }
 
   /**
-   * Removes background from an image file or blob
+   * Removes background from an image with full-bleed padding assist and chroma refinement
    * @param {File|Blob|string} imageSource
    * @param {Function} [onProgress] - Callback for model download and processing progress
+   * @param {Object} [options]
+   * @param {boolean} [options.paddingAssist=true] - Extends margins with edge clamping before inference
+   * @param {boolean} [options.autoChroma=true] - Clean flat banner backgrounds
+   * @param {number} [options.padRatio=0.15] - Margin injection ratio
    * @returns {Promise<Blob>} - Output transparent PNG blob
    */
-  async removeBackground(imageSource, onProgress = null) {
+  async removeBackground(imageSource, onProgress = null, options = {}) {
+    const {
+      paddingAssist = true,
+      solidifyProduct = true,
+      padRatio = 0.15
+    } = options;
+
     const mod = await this.getModule();
     const removeBackgroundFn = mod.removeBackground || mod.default?.removeBackground;
 
@@ -72,8 +78,51 @@ class BackgroundRemovalService {
     };
 
     try {
-      const resultBlob = await removeBackgroundFn(imageSource, config);
-      return resultBlob;
+      let inferenceInput = imageSource;
+      let padData = null;
+
+      // Step 1: Pre-inference Padding Injection for edge-to-edge / full-bleed products
+      if (paddingAssist) {
+        if (typeof onProgress === 'function') {
+          onProgress({ phase: 'preprocess:padding', current: 0, total: 100, percent: 10 });
+        }
+        const img = await CatalogImageProcessor.loadImage(imageSource);
+        padData = await CatalogImageProcessor.preparePaddedImage(img, padRatio);
+        inferenceInput = padData.paddedBlob;
+      }
+
+      // Step 2: AI Background Removal Inference
+      const rawCutoutBlob = await removeBackgroundFn(inferenceInput, config);
+
+      // Step 3: Crop back to exact original frame
+      let finalCutoutBlob = rawCutoutBlob;
+      if (padData) {
+        const { blob: croppedBlob } = await CatalogImageProcessor.cropFromPaddedCutout(
+          rawCutoutBlob,
+          padData.padX,
+          padData.padY,
+          padData.originalWidth,
+          padData.originalHeight
+        );
+        finalCutoutBlob = croppedBlob;
+      }
+
+      // Step 4: Solidify product mask & restore 100% original RGB colors
+      // Fixes washed-out / faded packaging colors (like purple carton faces or orange wrappers)
+      if (solidifyProduct) {
+        try {
+          const solidifiedResult = await CatalogImageProcessor.solidifyProductMask(
+            finalCutoutBlob,
+            imageSource,
+            { alphaThreshold: 20 }
+          );
+          finalCutoutBlob = solidifiedResult.blob;
+        } catch (solidifyErr) {
+          console.warn('Product mask solidification skipped:', solidifyErr);
+        }
+      }
+
+      return finalCutoutBlob;
     } catch (error) {
       console.error('Background removal inference error:', error);
       throw error;
@@ -82,3 +131,4 @@ class BackgroundRemovalService {
 }
 
 export const bgRemover = new BackgroundRemovalService();
+

@@ -1,6 +1,7 @@
 /**
  * Catalog Picture Studio - Application Controller
  * Handles batch queue management, UI interactions, AI execution,
+ * Edge-to-Edge Padding Assist, Auto-Chroma Banner Keying, Box Mode,
  * and ZIP export packaging.
  */
 
@@ -19,8 +20,22 @@ class CatalogApp {
       backgroundColor: '#FFFFFF',
       format: 'image/jpeg',
       quality: 0.92,
-      namingSuffix: '_catalog'
+      namingSuffix: '_catalog',
+      paddingAssist: true,
+      solidifyProduct: true
     };
+
+    this.currentModalItem = null;
+    this.modalTempCutout = null;
+    this.modalTempResult = null;
+    this.modalTempMode = null;
+    this.isWandActive = false;
+    this.lastSeedPoint = null;
+    this.brushMode = null;
+    this.brushRadius = 24;
+    this.isPainting = false;
+    this.brushWorkingCanvas = null;
+    this.origWorkingImage = null;
 
     this.initElements();
     this.attachEventListeners();
@@ -39,6 +54,8 @@ class CatalogApp {
     this.valPadding = document.getElementById('val-padding');
     this.selectBg = document.getElementById('select-bg');
     this.selectFormat = document.getElementById('select-format');
+    this.togglePaddingAssist = document.getElementById('toggle-padding-assist');
+    this.toggleSolidify = document.getElementById('toggle-solidify');
 
     // Batch Actions
     this.btnStartBatch = document.getElementById('btn-start-batch');
@@ -57,12 +74,31 @@ class CatalogApp {
     this.cardsGrid = document.getElementById('cards-grid');
     this.emptyState = document.getElementById('empty-state');
 
-    // Comparison Modal
+    // Inspection & Repair Modal
     this.modal = document.getElementById('compare-modal');
     this.modalClose = document.getElementById('modal-close');
     this.modalImgOriginal = document.getElementById('modal-img-original');
     this.modalImgResult = document.getElementById('modal-img-result');
     this.modalTitle = document.getElementById('modal-title');
+    this.boxOriginal = document.getElementById('box-original');
+    this.btnFixHealBorders = document.getElementById('btn-fix-heal-borders');
+    this.btnFixSnapBox = document.getElementById('btn-fix-snap-box');
+    this.btnToolBrushRestore = document.getElementById('btn-tool-brush-restore');
+    this.btnToolBrushErase = document.getElementById('btn-tool-brush-erase');
+    this.btnFixBoxMode = document.getElementById('btn-fix-box-mode');
+    this.btnFixSolidify = document.getElementById('btn-fix-solidify');
+    this.btnFixChroma = document.getElementById('btn-fix-chroma');
+    this.btnFixAiRetry = document.getElementById('btn-fix-ai-retry');
+    this.brushControls = document.getElementById('brush-controls');
+    this.sliderBrushSize = document.getElementById('slider-brush-size');
+    this.valBrushSize = document.getElementById('val-brush-size');
+    this.brushHint = document.getElementById('brush-hint');
+    this.wandControls = document.getElementById('wand-controls');
+    this.sliderTolerance = document.getElementById('slider-tolerance');
+    this.valTolerance = document.getElementById('val-tolerance');
+    this.modalStatusText = document.getElementById('modal-status-text');
+    this.btnModalCancel = document.getElementById('btn-modal-cancel');
+    this.btnModalSave = document.getElementById('btn-modal-save');
   }
 
   attachEventListeners() {
@@ -124,15 +160,116 @@ class CatalogApp {
       this.settings.format = e.target.value;
     });
 
+    if (this.togglePaddingAssist) {
+      this.togglePaddingAssist.addEventListener('change', (e) => {
+        this.settings.paddingAssist = e.target.checked;
+      });
+    }
+
+    if (this.toggleSolidify) {
+      this.toggleSolidify.addEventListener('change', (e) => {
+        this.settings.solidifyProduct = e.target.checked;
+      });
+    }
+
     // Batch Actions
     this.btnStartBatch.addEventListener('click', () => this.startBatchProcessing());
     this.btnClearQueue.addEventListener('click', () => this.clearQueue());
     this.btnDownloadZip.addEventListener('click', () => this.downloadAllAsZip());
 
-    // Modal
+    // Modal Close
     this.modalClose.addEventListener('click', () => this.closeModal());
     this.modal.addEventListener('click', (e) => {
       if (e.target === this.modal) this.closeModal();
+    });
+    if (this.btnModalCancel) {
+      this.btnModalCancel.addEventListener('click', () => this.closeModal());
+    }
+
+    // Modal Repair Tools
+    if (this.btnFixHealBorders) {
+      this.btnFixHealBorders.addEventListener('click', () => this.handleFixHealBorders(false));
+    }
+    if (this.btnFixSnapBox) {
+      this.btnFixSnapBox.addEventListener('click', () => this.handleFixHealBorders(true));
+    }
+    if (this.btnToolBrushRestore) {
+      this.btnToolBrushRestore.addEventListener('click', () => this.setBrushMode('restore'));
+    }
+    if (this.btnToolBrushErase) {
+      this.btnToolBrushErase.addEventListener('click', () => this.setBrushMode('erase'));
+    }
+    if (this.btnFixBoxMode) {
+      this.btnFixBoxMode.addEventListener('click', () => this.handleFixBoxMode());
+    }
+    if (this.btnFixSolidify) {
+      this.btnFixSolidify.addEventListener('click', () => this.handleFixSolidify());
+    }
+    if (this.btnFixChroma) {
+      this.btnFixChroma.addEventListener('click', () => this.toggleWandMode());
+    }
+    if (this.btnFixAiRetry) {
+      this.btnFixAiRetry.addEventListener('click', () => this.handleFixAiRetry());
+    }
+    if (this.btnModalSave) {
+      this.btnModalSave.addEventListener('click', () => this.saveModalResult());
+    }
+
+    if (this.sliderBrushSize) {
+      this.sliderBrushSize.addEventListener('input', (e) => {
+        this.brushRadius = parseInt(e.target.value, 10);
+        this.valBrushSize.textContent = `${this.brushRadius}px`;
+      });
+    }
+
+    if (this.sliderTolerance) {
+      this.sliderTolerance.addEventListener('input', (e) => {
+        this.valTolerance.textContent = e.target.value;
+        if (this.lastSeedPoint) {
+          this.runChromaWand(this.lastSeedPoint.x, this.lastSeedPoint.y, parseInt(e.target.value, 10));
+        }
+      });
+    }
+
+    // Modal Mouse Interactions (Wand click & Brush painting)
+    if (this.modalImgOriginal) {
+      this.modalImgOriginal.addEventListener('mousedown', (e) => {
+        if (this.brushMode && this.currentModalItem) {
+          e.preventDefault();
+          this.isPainting = true;
+          this.paintAtEvent(e);
+        }
+      });
+
+      this.modalImgOriginal.addEventListener('click', (e) => {
+        if (!this.isWandActive || !this.currentModalItem) return;
+        const rect = this.modalImgOriginal.getBoundingClientRect();
+        const clickX = e.clientX - rect.left;
+        const clickY = e.clientY - rect.top;
+
+        const normX = Math.max(0, Math.min(1, clickX / rect.width));
+        const normY = Math.max(0, Math.min(1, clickY / rect.height));
+        const naturalW = this.modalImgOriginal.naturalWidth || rect.width;
+        const naturalH = this.modalImgOriginal.naturalHeight || rect.height;
+        const imgX = Math.round(normX * naturalW);
+        const imgY = Math.round(normY * naturalH);
+
+        this.lastSeedPoint = { x: imgX, y: imgY };
+        this.runChromaWand(imgX, imgY, parseInt(this.sliderTolerance.value, 10));
+      });
+    }
+
+    window.addEventListener('mousemove', (e) => {
+      if (this.isPainting) {
+        this.paintAtEvent(e);
+      }
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (this.isPainting) {
+        this.isPainting = false;
+        this.finalizeBrushStroke();
+      }
     });
   }
 
@@ -153,6 +290,7 @@ class CatalogApp {
         resultBlob: null,
         resultDataUrl: null,
         activeView: 'result', // or 'original'
+        mode: 'ai', // 'ai' or 'box' (Full Box / Frame)
         error: null
       };
 
@@ -221,44 +359,89 @@ class CatalogApp {
 
   async processItem(item) {
     item.status = 'processing';
-    item.progressDetail = 'Initializing AI model...';
     this.updateCardUI(item);
 
     try {
-      // Step 1: AI Background Removal
-      const cutoutBlob = await bgRemover.removeBackground(
-        item.file,
-        ({ phase, percent }) => {
-          if (phase.includes('fetch')) {
-            item.progressDetail = `Downloading AI Model (${percent}%)`;
-          } else {
-            item.progressDetail = `Extracting Product (${percent}%)`;
+      if (item.mode === 'box') {
+        // Box Mode: The photo itself is the product box (e.g. multi-pack carton covering full frame).
+        // Center full frame without destructive AI cuts.
+        item.progressDetail = `Centering full box on ${this.settings.targetSize}×${this.settings.targetSize}...`;
+        this.updateCardUI(item);
+
+        const centerResult = await CatalogImageProcessor.centerOnSquare(
+          item.file,
+          {
+            targetSize: this.settings.targetSize,
+            paddingPercent: this.settings.paddingPercent,
+            backgroundColor: this.settings.backgroundColor,
+            format: this.settings.format,
+            quality: this.settings.quality,
+            isFullFrame: true
           }
-          this.updateCardUI(item);
+        );
+
+        item.cutoutBlob = null;
+        item.resultBlob = centerResult.blob;
+        item.resultDataUrl = centerResult.dataUrl;
+        item.status = 'completed';
+        item.progressDetail = 'Box centered on 1000×1000';
+        item.activeView = 'result';
+      } else {
+        // AI Cutout Mode: Automatic background removal with edge-clamping padding assist & chroma keying
+        item.progressDetail = 'Initializing AI engine...';
+        this.updateCardUI(item);
+
+        const cutoutBlob = await bgRemover.removeBackground(
+          item.file,
+          ({ phase, percent }) => {
+            if (phase.includes('fetch')) {
+              item.progressDetail = `Downloading AI Model (${percent}%)`;
+            } else if (phase.includes('padding')) {
+              item.progressDetail = `Injecting Padded Margins...`;
+            } else {
+              item.progressDetail = `Extracting Product (${percent}%)`;
+            }
+            this.updateCardUI(item);
+          },
+          {
+            paddingAssist: this.settings.paddingAssist,
+            solidifyProduct: this.settings.solidifyProduct
+          }
+        );
+
+        // Automatically heal concave border bites and packaging gaps
+        let processedCutout = cutoutBlob;
+        try {
+          const healed = await CatalogImageProcessor.healMaskBorders(cutoutBlob, item.file, {
+            boxSnap: false
+          });
+          processedCutout = healed.blob;
+        } catch (healErr) {
+          console.warn('Auto-heal border bites skipped:', healErr);
         }
-      );
 
-      item.cutoutBlob = cutoutBlob;
-      item.progressDetail = `Centering on ${this.settings.targetSize}×${this.settings.targetSize} white canvas...`;
-      this.updateCardUI(item);
+        item.cutoutBlob = processedCutout;
+        item.progressDetail = `Centering on ${this.settings.targetSize}×${this.settings.targetSize} white canvas...`;
+        this.updateCardUI(item);
 
-      // Step 2: Precision Alpha Trimming & 1000x1000 White Square Centering
-      const centerResult = await CatalogImageProcessor.centerOnSquare(
-        cutoutBlob,
-        {
-          targetSize: this.settings.targetSize,
-          paddingPercent: this.settings.paddingPercent,
-          backgroundColor: this.settings.backgroundColor,
-          format: this.settings.format,
-          quality: this.settings.quality
-        }
-      );
+        const centerResult = await CatalogImageProcessor.centerOnSquare(
+          processedCutout,
+          {
+            targetSize: this.settings.targetSize,
+            paddingPercent: this.settings.paddingPercent,
+            backgroundColor: this.settings.backgroundColor,
+            format: this.settings.format,
+            quality: this.settings.quality,
+            isFullFrame: false
+          }
+        );
 
-      item.resultBlob = centerResult.blob;
-      item.resultDataUrl = centerResult.dataUrl;
-      item.status = 'completed';
-      item.progressDetail = 'Ready for catalog';
-      item.activeView = 'result';
+        item.resultBlob = centerResult.blob;
+        item.resultDataUrl = centerResult.dataUrl;
+        item.status = 'completed';
+        item.progressDetail = 'Ready for catalog';
+        item.activeView = 'result';
+      }
     } catch (err) {
       console.error('Failed to process item:', item.name, err);
       item.status = 'error';
@@ -388,15 +571,339 @@ class CatalogApp {
     }
   }
 
-  openModal(item) {
-    this.modalTitle.textContent = `${item.name} - Catalog Inspection`;
+  async openModal(item) {
+    this.currentModalItem = item;
+    this.modalTempCutout = item.cutoutBlob;
+    this.modalTempResult = { blob: item.resultBlob, dataUrl: item.resultDataUrl };
+    this.modalTempMode = item.mode || 'ai';
+    this.lastSeedPoint = null;
+    this.toggleWandMode(false);
+    this.setBrushMode(null);
+
+    this.modalTitle.textContent = `${item.name} - Inspection & Border Repair`;
     this.modalImgOriginal.src = item.originalUrl;
     this.modalImgResult.src = item.resultDataUrl || item.originalUrl;
+    this.modalStatusText.textContent = item.mode === 'box'
+      ? 'Box Mode is active (Full box packaging preserved).'
+      : 'Click "Heal Bites" or "Restore Brush" to fix missing borders.';
     this.modal.style.display = 'flex';
+
+    await this.initBrushWorkingCanvas();
   }
 
   closeModal() {
     this.modal.style.display = 'none';
+    this.currentModalItem = null;
+    this.toggleWandMode(false);
+    this.setBrushMode(null);
+  }
+
+  setBrushMode(mode) {
+    if (this.brushMode === mode) {
+      this.brushMode = null;
+    } else {
+      this.brushMode = mode;
+      this.toggleWandMode(false);
+    }
+
+    if (this.btnToolBrushRestore) {
+      this.btnToolBrushRestore.classList.toggle('btn-tool-active', this.brushMode === 'restore');
+    }
+    if (this.btnToolBrushErase) {
+      this.btnToolBrushErase.classList.toggle('btn-tool-active', this.brushMode === 'erase');
+    }
+    if (this.brushControls) {
+      this.brushControls.style.display = this.brushMode ? 'flex' : 'none';
+    }
+    if (this.boxOriginal) {
+      this.boxOriginal.classList.toggle('cursor-brush', !!this.brushMode);
+    }
+
+    if (this.brushMode) {
+      if (this.brushHint) {
+        this.brushHint.textContent = this.brushMode === 'restore'
+          ? 'Click & drag on the left image to restore packaging border pixels'
+          : 'Click & drag on the left image to erase unwanted background bits';
+      }
+      this.modalStatusText.textContent = `${this.brushMode === 'restore' ? 'Restore' : 'Erase'} Brush Active: drag on Original preview to paint.`;
+    } else {
+      this.modalStatusText.textContent = 'Previewing current result';
+    }
+  }
+
+  async initBrushWorkingCanvas() {
+    if (!this.currentModalItem) return;
+    this.origWorkingImage = await CatalogImageProcessor.loadImage(this.currentModalItem.file);
+    const w = this.origWorkingImage.naturalWidth || this.origWorkingImage.width;
+    const h = this.origWorkingImage.naturalHeight || this.origWorkingImage.height;
+
+    this.brushWorkingCanvas = document.createElement('canvas');
+    this.brushWorkingCanvas.width = w;
+    this.brushWorkingCanvas.height = h;
+    const ctx = this.brushWorkingCanvas.getContext('2d', { willReadFrequently: true });
+
+    const currentSource = this.modalTempCutout || this.currentModalItem.cutoutBlob || this.currentModalItem.file;
+    const currentImg = await CatalogImageProcessor.loadImage(currentSource);
+    ctx.drawImage(currentImg, 0, 0, w, h);
+  }
+
+  async paintAtEvent(e) {
+    if (!this.brushMode || !this.currentModalItem || !this.brushWorkingCanvas) return;
+    const rect = this.modalImgOriginal.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+
+    const normX = Math.max(0, Math.min(1, clickX / rect.width));
+    const normY = Math.max(0, Math.min(1, clickY / rect.height));
+    const naturalW = this.brushWorkingCanvas.width;
+    const naturalH = this.brushWorkingCanvas.height;
+    const imgX = Math.round(normX * naturalW);
+    const imgY = Math.round(normY * naturalH);
+
+    await CatalogImageProcessor.applyBrush(
+      this.brushWorkingCanvas,
+      this.origWorkingImage,
+      imgX,
+      imgY,
+      this.brushMode,
+      this.brushRadius
+    );
+
+    this.modalImgResult.src = this.brushWorkingCanvas.toDataURL('image/png');
+  }
+
+  async finalizeBrushStroke() {
+    if (!this.brushWorkingCanvas || !this.currentModalItem) return;
+    this.modalStatusText.textContent = 'Updating 1000×1000 square preview...';
+
+    const centerResult = await CatalogImageProcessor.centerOnSquare(
+      this.brushWorkingCanvas,
+      {
+        targetSize: this.settings.targetSize,
+        paddingPercent: this.settings.paddingPercent,
+        backgroundColor: this.settings.backgroundColor,
+        format: this.settings.format,
+        quality: this.settings.quality,
+        isFullFrame: false
+      }
+    );
+
+    this.modalTempCutout = this.brushWorkingCanvas;
+    this.modalTempResult = centerResult;
+    this.modalTempMode = 'brushed';
+    this.modalImgResult.src = centerResult.dataUrl;
+    this.modalStatusText.textContent = 'Brush stroke applied! Click "Apply to Queue" to save.';
+  }
+
+  async handleFixHealBorders(boxSnap = false) {
+    if (!this.currentModalItem) return;
+    this.modalStatusText.textContent = boxSnap
+      ? 'Snapping to straight rectangular box borders...'
+      : 'Healing concave border bites and missing chunks...';
+
+    try {
+      const sourceCutout = this.modalTempCutout || this.currentModalItem.cutoutBlob || this.currentModalItem.file;
+      const healedResult = await CatalogImageProcessor.healMaskBorders(
+        sourceCutout,
+        this.currentModalItem.file,
+        { alphaThreshold: 20, boxSnap }
+      );
+
+      const centerResult = await CatalogImageProcessor.centerOnSquare(
+        healedResult.blob,
+        {
+          targetSize: this.settings.targetSize,
+          paddingPercent: this.settings.paddingPercent,
+          backgroundColor: this.settings.backgroundColor,
+          format: this.settings.format,
+          quality: this.settings.quality,
+          isFullFrame: false
+        }
+      );
+
+      this.modalTempCutout = healedResult.blob;
+      this.modalTempResult = centerResult;
+      this.modalTempMode = boxSnap ? 'boxSnap' : 'healed';
+      this.modalImgResult.src = centerResult.dataUrl;
+      this.modalStatusText.textContent = boxSnap
+        ? 'Box packaging snapped to straight borders! Click "Apply to Queue" to save.'
+        : 'Border bites healed & bridged! Click "Apply to Queue" to save.';
+
+      await this.initBrushWorkingCanvas();
+    } catch (err) {
+      console.error('Border healing failed:', err);
+      this.modalStatusText.textContent = 'Border healing error: ' + err.message;
+    }
+  }
+
+  toggleWandMode(forceState = null) {
+    this.isWandActive = forceState !== null ? forceState : !this.isWandActive;
+    if (this.btnFixChroma) {
+      this.btnFixChroma.classList.toggle('btn-wand-active', this.isWandActive);
+    }
+    if (this.wandControls) {
+      this.wandControls.style.display = this.isWandActive ? 'flex' : 'none';
+    }
+    if (this.boxOriginal) {
+      this.boxOriginal.classList.toggle('cursor-crosshair', this.isWandActive);
+    }
+    if (this.modalStatusText) {
+      this.modalStatusText.textContent = this.isWandActive
+        ? 'Magic Wand Active: Click any background area on the Original image to erase it.'
+        : 'Previewing current result';
+    }
+  }
+
+  async runChromaWand(x, y, tolerance) {
+    if (!this.currentModalItem) return;
+    this.modalStatusText.textContent = `Erasing background color at (${x}, ${y})...`;
+
+    try {
+      const chromaResult = await CatalogImageProcessor.removeChromaBackground(
+        this.currentModalItem.file,
+        {
+          seeds: [{ x, y }],
+          tolerance
+        }
+      );
+
+      const centerResult = await CatalogImageProcessor.centerOnSquare(
+        chromaResult.blob,
+        {
+          targetSize: this.settings.targetSize,
+          paddingPercent: this.settings.paddingPercent,
+          backgroundColor: this.settings.backgroundColor,
+          format: this.settings.format,
+          quality: this.settings.quality,
+          isFullFrame: false
+        }
+      );
+
+      this.modalTempCutout = chromaResult.blob;
+      this.modalTempResult = centerResult;
+      this.modalTempMode = 'chroma';
+      this.modalImgResult.src = centerResult.dataUrl;
+      this.modalStatusText.textContent = `Color at (${x}, ${y}) erased with tolerance ${tolerance}. Click "Apply to Queue" to save.`;
+    } catch (err) {
+      console.error('Wand chroma failed:', err);
+      this.modalStatusText.textContent = 'Failed to erase background: ' + err.message;
+    }
+  }
+
+  async handleFixBoxMode() {
+    if (!this.currentModalItem) return;
+    this.modalStatusText.textContent = 'Formatting full packaging box at 1000×1000...';
+
+    try {
+      const centerResult = await CatalogImageProcessor.centerOnSquare(
+        this.currentModalItem.file,
+        {
+          targetSize: this.settings.targetSize,
+          paddingPercent: this.settings.paddingPercent,
+          backgroundColor: this.settings.backgroundColor,
+          format: this.settings.format,
+          quality: this.settings.quality,
+          isFullFrame: true
+        }
+      );
+
+      this.modalTempCutout = null;
+      this.modalTempResult = centerResult;
+      this.modalTempMode = 'box';
+      this.modalImgResult.src = centerResult.dataUrl;
+      this.modalStatusText.textContent = 'Box Mode applied (Full box packaging preserved). Click "Apply to Queue" to save.';
+    } catch (err) {
+      console.error('Box Mode failed:', err);
+      this.modalStatusText.textContent = 'Box Mode error: ' + err.message;
+    }
+  }
+
+  async handleFixSolidify() {
+    if (!this.currentModalItem) return;
+    this.modalStatusText.textContent = 'Solidifying product packaging & restoring 100% original colors...';
+
+    try {
+      const sourceCutout = this.modalTempCutout || this.currentModalItem.cutoutBlob || this.currentModalItem.file;
+      const solidifiedResult = await CatalogImageProcessor.solidifyProductMask(
+        sourceCutout,
+        this.currentModalItem.file,
+        { alphaThreshold: 20 }
+      );
+
+      const centerResult = await CatalogImageProcessor.centerOnSquare(
+        solidifiedResult.blob,
+        {
+          targetSize: this.settings.targetSize,
+          paddingPercent: this.settings.paddingPercent,
+          backgroundColor: this.settings.backgroundColor,
+          format: this.settings.format,
+          quality: this.settings.quality,
+          isFullFrame: false
+        }
+      );
+
+      this.modalTempCutout = solidifiedResult.blob;
+      this.modalTempResult = centerResult;
+      this.modalTempMode = 'solidified';
+      this.modalImgResult.src = centerResult.dataUrl;
+      this.modalStatusText.textContent = 'Product colors 100% restored and solidified! Click "Apply to Queue" to save.';
+    } catch (err) {
+      console.error('Solidify failed:', err);
+      this.modalStatusText.textContent = 'Solidify error: ' + err.message;
+    }
+  }
+
+  async handleFixAiRetry() {
+    if (!this.currentModalItem) return;
+    this.modalStatusText.textContent = 'Retrying AI with Padding Injection & Mask Solidification...';
+
+    try {
+      const cutoutBlob = await bgRemover.removeBackground(
+        this.currentModalItem.file,
+        null,
+        { paddingAssist: true, solidifyProduct: true }
+      );
+
+      const centerResult = await CatalogImageProcessor.centerOnSquare(
+        cutoutBlob,
+        {
+          targetSize: this.settings.targetSize,
+          paddingPercent: this.settings.paddingPercent,
+          backgroundColor: this.settings.backgroundColor,
+          format: this.settings.format,
+          quality: this.settings.quality,
+          isFullFrame: false
+        }
+      );
+
+      this.modalTempCutout = cutoutBlob;
+      this.modalTempResult = centerResult;
+      this.modalTempMode = 'ai';
+      this.modalImgResult.src = centerResult.dataUrl;
+      this.modalStatusText.textContent = 'AI Segmentation completed! Click "Apply to Queue" to save.';
+    } catch (err) {
+      console.error('AI retry failed:', err);
+      this.modalStatusText.textContent = 'AI Retry failed: ' + err.message;
+    }
+  }
+
+  saveModalResult() {
+    if (this.currentModalItem && this.modalTempResult) {
+      this.currentModalItem.resultBlob = this.modalTempResult.blob;
+      this.currentModalItem.resultDataUrl = this.modalTempResult.dataUrl;
+      if (this.modalTempCutout) {
+        this.currentModalItem.cutoutBlob = this.modalTempCutout;
+      }
+      if (this.modalTempMode) {
+        this.currentModalItem.mode = this.modalTempMode;
+      }
+      this.currentModalItem.status = 'completed';
+      this.currentModalItem.progressDetail = 'Refined in Studio';
+      this.currentModalItem.activeView = 'result';
+      this.updateCardUI(this.currentModalItem);
+      this.renderStats();
+    }
+    this.closeModal();
   }
 
   render() {
@@ -423,15 +930,19 @@ class CatalogApp {
     const isDone = item.status === 'completed';
     const isProcessing = item.status === 'processing';
     const isError = item.status === 'error';
+    const isBoxMode = item.mode === 'box';
 
     const currentSrc = isDone && item.activeView === 'result' ? item.resultDataUrl : item.originalUrl;
 
     card.innerHTML = `
       <div class="card-top">
-        <span class="status-badge ${item.status}">
-          ${isProcessing ? '<div class="spinner" style="width: 10px; height: 10px; border-width: 2px;"></div>' : ''}
-          ${item.status}
-        </span>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span class="status-badge ${item.status}">
+            ${isProcessing ? '<div class="spinner" style="width: 10px; height: 10px; border-width: 2px;"></div>' : ''}
+            ${item.status}
+          </span>
+          ${isBoxMode ? '<span class="badge-mode">Box Mode</span>' : ''}
+        </div>
         <button class="btn-icon btn-remove" title="Remove image" id="remove-${item.id}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
         </button>
@@ -458,15 +969,21 @@ class CatalogApp {
 
       <div class="card-actions">
         ${isDone ? `
-          <button class="btn btn-secondary btn-card btn-inspect" id="inspect-${item.id}">
+          <button class="btn btn-secondary btn-card btn-inspect" id="inspect-${item.id}" title="Inspect & Repair">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             Inspect
+          </button>
+          <button class="btn btn-secondary btn-card" id="toggle-mode-${item.id}" title="${isBoxMode ? 'Switch to AI Cutout' : 'Switch to Box Mode'}">
+            ${isBoxMode ? 'AI Cut' : 'Box Mode'}
           </button>
           <button class="btn btn-primary btn-card btn-download" id="download-${item.id}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             Download
           </button>
         ` : `
+          <button class="btn btn-secondary btn-card" id="toggle-mode-${item.id}" title="Set processing mode">
+            ${isBoxMode ? 'Mode: Box' : 'Mode: AI'}
+          </button>
           <button class="btn btn-secondary btn-card" disabled>
             ${isProcessing ? 'Processing...' : 'Queued'}
           </button>
@@ -476,6 +993,18 @@ class CatalogApp {
 
     // Bind card buttons
     card.querySelector(`#remove-${item.id}`).addEventListener('click', () => this.removeFile(item.id));
+
+    const toggleModeBtn = card.querySelector(`#toggle-mode-${item.id}`);
+    if (toggleModeBtn) {
+      toggleModeBtn.addEventListener('click', async () => {
+        item.mode = item.mode === 'box' ? 'ai' : 'box';
+        if (isDone) {
+          await this.processItem(item);
+        } else {
+          this.updateCardUI(item);
+        }
+      });
+    }
 
     if (isDone) {
       const toggleBtn = card.querySelector(`#toggle-${item.id}`);
@@ -530,8 +1059,6 @@ class CatalogApp {
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
   }
-
-
 }
 
 // Instantiate on DOM ready

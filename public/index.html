@@ -90,6 +90,28 @@
               <option value="image/webp">WebP</option>
             </select>
           </div>
+
+          <div class="control-group toggle-group">
+            <label class="control-label" for="toggle-padding-assist" title="Pads edge-touching products with clamped margins before AI processing">
+              Edge-to-Edge Assist
+            </label>
+            <label class="toggle-switch">
+              <input type="checkbox" id="toggle-padding-assist" checked>
+              <span class="toggle-slider"></span>
+              <span class="toggle-label-text">15% Padded Margins</span>
+            </label>
+          </div>
+
+          <div class="control-group toggle-group">
+            <label class="control-label" for="toggle-solidify" title="Restores 100% original RGB colors and opacity, preventing washed out packaging">
+              Solidify Colors
+            </label>
+            <label class="toggle-switch">
+              <input type="checkbox" id="toggle-solidify" checked>
+              <span class="toggle-slider"></span>
+              <span class="toggle-label-text">100% Opaque Colors</span>
+            </label>
+          </div>
         </div>
       </section>
 
@@ -174,29 +196,83 @@
       </section>
     </main>
 
-    <!-- Inspection Modal -->
+    <!-- Inspection & Repair Modal -->
     <div class="modal-overlay" id="compare-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
       <div class="modal-content">
         <div class="modal-header">
-          <h2 class="modal-title" id="modal-title">Inspection</h2>
+          <h2 class="modal-title" id="modal-title">Inspection & Repair</h2>
           <button class="btn-icon" id="modal-close" aria-label="Close Modal">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
           </button>
         </div>
 
+        <!-- Quick Repair Toolbar for Tough Images -->
+        <div class="modal-toolbar">
+          <div class="toolbar-section">
+            <span class="toolbar-label">Border Repairs:</span>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-fix-heal-borders" title="Heal jagged bites & missing chunks along product packaging borders">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></svg>
+              Heal Bites (Auto)
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-fix-snap-box" title="Snap to clean straight box rectangle for carton packaging">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="1"/></svg>
+              Snap to Box
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-tool-brush-restore" title="Paint to restore original pixels back into bites">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
+              Restore Brush
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-tool-brush-erase" title="Paint to erase leftover background bits">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              Erase Brush
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-fix-solidify" title="Restore 100% full original product colors and opacity">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>
+              Solidify 100%
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-fix-box-mode" title="Use when the photo covers the entire product box">
+              Box Mode (Full Box)
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-fix-chroma" title="Click on image to flood-erase background color">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m14 12-8.5 8.5a2.12 2.12 0 1 1-3-3L11 9"/><path d="M16 8 8 16"/><path d="m18 10 2-2a2.83 2.83 0 0 0-4-4l-2 2"/></svg>
+              Magic Wand
+            </button>
+          </div>
+
+          <div class="toolbar-section brush-controls" id="brush-controls" style="display: none;">
+            <label class="toolbar-label" for="slider-brush-size">Brush: <span id="val-brush-size">24px</span></label>
+            <input type="range" id="slider-brush-size" class="range-slider range-sm" min="8" max="80" value="24" step="2">
+            <span class="wand-hint" id="brush-hint">Click & drag on the left image to paint pixels back</span>
+          </div>
+
+          <div class="toolbar-section wand-controls" id="wand-controls" style="display: none;">
+            <label class="toolbar-label" for="slider-tolerance">Tolerance: <span id="val-tolerance">34</span></label>
+            <input type="range" id="slider-tolerance" class="range-slider range-sm" min="10" max="80" value="34" step="2">
+            <span class="wand-hint">Click background on the left image to erase it</span>
+          </div>
+        </div>
+
         <div class="modal-body">
           <div class="modal-compare-panel">
-            <div class="modal-compare-label">Original</div>
-            <div class="modal-compare-box">
-              <img id="modal-img-original" src="" alt="Original Image">
+            <div class="modal-compare-label">Original <span class="panel-subtext">(Clickable in Wand mode)</span></div>
+            <div class="modal-compare-box" id="box-original">
+              <img id="modal-img-original" src="" alt="Original Image" crossorigin="anonymous">
             </div>
           </div>
 
           <div class="modal-compare-panel">
-            <div class="modal-compare-label">Processed Result</div>
+            <div class="modal-compare-label">1000×1000 White Square Result</div>
             <div class="modal-compare-box">
               <img id="modal-img-result" src="" alt="Processed Result Image">
             </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <div class="modal-footer-status" id="modal-status-text">Previewing current result</div>
+          <div class="modal-footer-actions">
+            <button type="button" class="btn btn-secondary" id="btn-modal-cancel">Close</button>
+            <button type="button" class="btn btn-success" id="btn-modal-save">Apply to Queue</button>
           </div>
         </div>
       </div>
